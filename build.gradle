@@ -47,7 +47,6 @@ dependencies {
 	implementation 'com.azure:azure-storage-blob'
 	implementation 'io.camunda:zeebe-client-java'
 	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-csv'
-	//implementation 'org.springframework.kafka:spring-kafka:2.5.8.RELEASE'
 	implementation 'org.apache.camel:camel-jackson'
 	implementation 'org.apache.camel.springboot:camel-mail-starter'
 	implementation 'io.rest-assured:rest-assured'
