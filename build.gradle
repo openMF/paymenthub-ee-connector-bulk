@@ -39,6 +39,9 @@ dependencies {
 	implementation 'org.apache.camel:camel-undertow'
 	implementation 'org.springframework.boot:spring-boot-starter'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// Bean Validation for the @Validated configuration records: nothing else
+	// on the classpath provides it.
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework:spring-web'
 	implementation 'org.apache.camel:camel-http'
 	// AWS SDK v1 kept pinned: actually used by the storage code; v1 -> v2 is a
