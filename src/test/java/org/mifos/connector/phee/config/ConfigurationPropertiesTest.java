@@ -31,6 +31,7 @@ class ConfigurationPropertiesTest {
     /** The values application.yaml ships with. */
     private static String[] validConfig() {
         return new String[] { "operations-app.contactpoint=https://ops-bk.mifos.gazelle.test",
+            "operations-app.username=mifos", "operations-app.password=password",
             "operations-app.endpoints.auth=/oauth/token", "operations-app.endpoints.batch-summary=/api/v1/batch",
             "operations-app.endpoints.batch-detail=/api/v1/batch/detail",
             "mock-payment-schema.contactpoint=http://paymenthub-ee-connector-mock-payment-schema:8080",
@@ -62,21 +63,19 @@ class ConfigurationPropertiesTest {
     }
 
     @Test
-    void aDeletedSectionLeavesAnEmptyGroupRatherThanANullOne() {
-        // every channel.* property removed: @DefaultValue on the nested group means endpoints is still
-        // an object, so reading it is a null value rather than a NullPointerException
+    void aDeletedSectionStopsStartup() {
+        // every channel.* property removed: before the records, the bare @Value on channel.contactpoint and
+        // channel.endpoints.transfer stopped startup, and the records must do the same
         runner.withPropertyValues("operations-app.contactpoint=https://ops-bk.mifos.gazelle.test",
+                "operations-app.username=mifos", "operations-app.password=password",
                 "operations-app.endpoints.auth=/oauth/token", "operations-app.endpoints.batch-summary=/api/v1/batch",
                 "operations-app.endpoints.batch-detail=/api/v1/batch/detail",
                 "mock-payment-schema.contactpoint=http://mock:8080",
                 "mock-payment-schema.endpoints.batch-summary=/s", "mock-payment-schema.endpoints.batch-detail=/d",
                 "bulk-processor.contactpoint=https://bp:8443", "bulk-processor.endpoints.batch-transaction=/t",
                 "bulk-processor.endpoints.batch-execution=/e").run(context -> {
-                    assertThat(context).hasNotFailed();
-                    ChannelProperties channel = context.getBean(ChannelProperties.class);
-                    assertThat(channel.contactpoint()).isNull();
-                    assertThat(channel.endpoints()).isNotNull();
-                    assertThat(channel.endpoints().transfer()).isNull();
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).hasStackTraceContaining("Binding validation errors on channel");
                 });
     }
 

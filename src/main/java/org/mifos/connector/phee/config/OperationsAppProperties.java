@@ -1,7 +1,9 @@
 package org.mifos.connector.phee.config;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Everything under {@code operations-app}.
@@ -11,13 +13,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * them as environment variables ({@code OPERATIONS_APP_CONTACTPOINT},
  * {@code OPERATIONS_APP_ENDPOINTS_BATCH_SUMMARY} and so on). Renaming one would silently break a deployment.
  */
+@Validated
 @ConfigurationProperties(prefix = "operations-app")
-public record OperationsAppProperties(String contactpoint,
-        String username, String password, @DefaultValue Endpoints endpoints) {
+public record OperationsAppProperties(@NotNull String contactpoint,
+        @NotNull String username, @NotNull String password, @NotNull @Valid Endpoints endpoints) {
 
-    public record Endpoints(String auth,
-            String batchSummary,
-            String batchDetail) {}
+    public record Endpoints(@NotNull String auth,
+            @NotNull String batchSummary,
+            @NotNull String batchDetail) {}
 
     public String batchSummaryUrl() {
         return contactpoint + endpoints.batchSummary();
