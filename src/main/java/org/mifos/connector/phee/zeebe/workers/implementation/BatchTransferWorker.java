@@ -101,7 +101,7 @@ public class BatchTransferWorker extends BaseWorker {
         logger.info("## Channel config - transfer url: {}", channelProperties.transferUrl());
         newWorker(INIT_BATCH_TRANSFER, (client, job) ->{
             Map<String, Object> variables = job.getVariablesAsMap();
-            String debulkingDfspId = variables.get(DEBULKINGDFSPID).toString();
+            String debulkingDfspId = requiredVariable(variables, DEBULKINGDFSPID);
             String payeeDfspId = variables.get(PAYEE_DFSP_ID) != null ? variables.get(PAYEE_DFSP_ID).toString() : null;
             variables.put("waitTimer", waitTimer);
 

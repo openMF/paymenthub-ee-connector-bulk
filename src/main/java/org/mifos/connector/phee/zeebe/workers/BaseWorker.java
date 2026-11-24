@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+import java.util.Map;
 
 // TODO: Duplicate file (Also exists in <service-name>)
 @Component
@@ -56,6 +57,18 @@ public abstract class BaseWorker {
                 .name(worker.getValue())
                 .maxJobsActive(workerMaxJobs)
                 .open();
+    }
+
+    /**
+     * The value of a Zeebe variable the job cannot run without. A missing one fails the job with a message that names
+     * it, rather than a NullPointerException that doesn't.
+     */
+    public static String requiredVariable(Map<String, Object> variables, String name) {
+        Object value = variables.get(name);
+        if (value == null) {
+            throw new IllegalStateException("Zeebe variable '" + name + "' is missing");
+        }
+        return value.toString();
     }
 
     public void sendToCamelRoute(RouteId routeId, Exchange exchange) {

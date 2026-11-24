@@ -55,8 +55,8 @@ public class BatchSummaryWorker extends BaseWorker {
             Map<String, Object> variables = job.getVariablesAsMap();
             int currentRetryCount = (int) variables.getOrDefault(CURRENT_RETRY_COUNT, 1);
 
-            String batchId = variables.get(BATCH_ID).toString();
-            SummaryResponse summary = callApi(batchId, variables.get(TENANT_ID).toString());
+            String batchId = requiredVariable(variables, BATCH_ID);
+            SummaryResponse summary = callApi(batchId, requiredVariable(variables, TENANT_ID));
             BatchDTO batchDTO = summary.batch();
             logger.info("Batch Summary: {}", objectMapper.writeValueAsString(batchDTO));
 
