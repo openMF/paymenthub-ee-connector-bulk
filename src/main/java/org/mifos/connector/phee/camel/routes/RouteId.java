@@ -1,8 +1,6 @@
 package org.mifos.connector.phee.camel.routes;
 
 public enum RouteId {
-    BATCH_SUMMARY("direct:batch-summary"),
-
     BATCH_DETAIL("direct:batch-detail"),
 
     UPLOAD_RESULT_FILE("direct:upload-result-file");
