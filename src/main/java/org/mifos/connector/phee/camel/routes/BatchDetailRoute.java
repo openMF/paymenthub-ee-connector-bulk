@@ -5,6 +5,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.LoggingLevel;
 import org.mifos.connector.phee.config.MockPaymentSchemaProperties;
 import org.mifos.connector.phee.config.OperationsAppProperties;
+import org.mifos.connector.phee.config.OperationsAppTokens;
 import org.mifos.connector.phee.schema.BatchDetailResponse;
 import org.mifos.connector.phee.schema.Transaction;
 import org.mifos.connector.phee.schema.TransactionResult;
@@ -54,6 +55,9 @@ public class BatchDetailRoute extends BaseRouteBuilder {
     @Autowired
     public OperationsAppProperties operationsAppProperties;
 
+    @Autowired
+    public OperationsAppTokens operationsAppTokens;
+
 
     @Override
     public void configure() throws Exception {
@@ -85,6 +89,8 @@ public class BatchDetailRoute extends BaseRouteBuilder {
                     String url = operationsAppProperties.batchDetailUrl() + "?batchId=" + batchId + "&pageNo=" + pageNo + "&pageSize=" + pageSize;
                     exchange.getIn().setHeader(Exchange.HTTP_URI, url);
                     exchange.getIn().setHeader("Platform-TenantId", tenantId);
+                    // the BFF needs a token once rest.authorization.enabled is true
+                    exchange.getIn().setHeader("Authorization", "Bearer " + operationsAppTokens.accessToken(tenantId));
                     logger.info("Calling operations-app batch detail: {} tenant: {}", url, tenantId);
                 })
                 .toD("${header.CamelHttpUri}")
