@@ -125,9 +125,9 @@ public class BatchTransferWorker extends BaseWorker {
             else if("closedloop".equalsIgnoreCase(paymentMode)){
                 logger.info("Processing closedloop batch transfer via channel connector");
                 String batchId = (String) variables.get(BATCH_ID);
-                int[] counts = processClosedloopTransfers(transactionList, batchId, debulkingDfspId);
-                int successCount = counts[0];
-                int failureCount = counts[1];
+                ClosedloopResult result = processClosedloopTransfers(transactionList, batchId, debulkingDfspId);
+                int successCount = result.successCount();
+                int failureCount = result.failureCount();
                 long total = transactionList.size();
 
                 variables.put(INIT_BATCH_TRANSFER_SUCCESS, failureCount == 0);
@@ -139,14 +139,10 @@ public class BatchTransferWorker extends BaseWorker {
                 variables.put(FAILED_TRANSACTION, (long) failureCount);
                 variables.put(ONGOING_TRANSACTION, 0L);
 
-                double totalAmt = transactionList.stream()
-                        .mapToDouble(t -> t.getAmount() != null ? Double.parseDouble(t.getAmount()) : 0.0)
-                        .sum();
-                double failedAmt = transactionList.stream()
-                        .skip(successCount)
-                        .mapToDouble(t -> t.getAmount() != null ? Double.parseDouble(t.getAmount()) : 0.0)
-                        .sum();
-                double completedAmt = totalAmt - failedAmt;
+                // Amounts come from the transactions that actually succeeded or failed, wherever they are in the file
+                double totalAmt = result.totalAmount();
+                double failedAmt = result.failedAmount();
+                double completedAmt = result.completedAmount();
                 variables.put(TOTAL_AMOUNT, totalAmt);
                 variables.put(COMPLETED_AMOUNT, completedAmt);
                 variables.put(FAILED_AMOUNT, failedAmt);
@@ -378,11 +374,11 @@ public class BatchTransferWorker extends BaseWorker {
         }
     }
 
-    private int[] processClosedloopTransfers(List<Transaction> transactionList, String batchId, String tenant) {
+    private ClosedloopResult processClosedloopTransfers(List<Transaction> transactionList, String batchId, String tenant) {
         logger.info("## CLOSEDLOOP - Processing {} transactions for batchId: {}", transactionList.size(), batchId);
 
-        int successCount = 0;
-        int failureCount = 0;
+        List<Transaction> succeeded = new ArrayList<>();
+        List<Transaction> failed = new ArrayList<>();
 
         for (Transaction transaction : transactionList) {
             try {
@@ -393,10 +389,10 @@ public class BatchTransferWorker extends BaseWorker {
                 boolean transferSuccess = invokeChannelTransfer(transaction, batchId, tenant);
 
                 if (transferSuccess) {
-                    successCount++;
+                    succeeded.add(transaction);
                     logger.info("## CLOSEDLOOP - Transaction {} succeeded", transaction.getId());
                 } else {
-                    failureCount++;
+                    failed.add(transaction);
                     logger.warn("## CLOSEDLOOP - Transaction {} failed", transaction.getId());
                 }
 
@@ -404,16 +400,16 @@ public class BatchTransferWorker extends BaseWorker {
                 reportExecutionStatus(transaction, batchId, tenant, transferSuccess);
 
             } catch (Exception e) {
-                failureCount++;
+                failed.add(transaction);
                 logger.error("## CLOSEDLOOP - Error processing transaction {}: {}",
                     transaction.getId(), e.getMessage(), e);
             }
         }
 
         logger.info("## CLOSEDLOOP - Batch {} complete. Success: {}, Failed: {}",
-            batchId, successCount, failureCount);
+            batchId, succeeded.size(), failed.size());
 
-        return new int[]{successCount, failureCount};
+        return new ClosedloopResult(succeeded, failed);
     }
 
     private boolean invokeChannelTransfer(Transaction transaction, String batchId, String tenant) {
