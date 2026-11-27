@@ -1,15 +1,5 @@
 package org.mifos.connector.phee.zeebe.workers.implementation;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.camel.Exchange;
-import org.apache.camel.support.DefaultExchange;
-import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
-import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
-
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.mifos.connector.phee.config.MockPaymentSchemaProperties;
 import org.mifos.connector.phee.schema.BatchDTO;
 import org.mifos.connector.phee.zeebe.workers.BaseWorker;
@@ -21,13 +11,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 
 import static org.mifos.connector.phee.zeebe.ZeebeVariables.BATCH_ID;
@@ -68,16 +55,10 @@ public class BatchSummaryWorker extends BaseWorker {
             Map<String, Object> variables = job.getVariablesAsMap();
             int currentRetryCount = (int) variables.getOrDefault(CURRENT_RETRY_COUNT, 1);
 
-            Exchange exchange = new DefaultExchange(camelContext);
-            exchange.setProperty(BATCH_ID, variables.get(BATCH_ID));
-            exchange.setProperty(TENANT_ID, variables.get(TENANT_ID));
-            //BatchDTO batchDTO =  new BatchDTO();
-            BatchDTO batchDTO = callApi(variables.get(BATCH_ID).toString(), variables.get(TENANT_ID).toString());
+            String batchId = requiredVariable(variables, BATCH_ID);
+            SummaryResponse summary = callApi(batchId, requiredVariable(variables, TENANT_ID));
+            BatchDTO batchDTO = summary.batch();
             logger.info("Batch Summary: {}", objectMapper.writeValueAsString(batchDTO));
-
-            //sendToCamelRoute(RouteId.BATCH_SUMMARY, exchange);
-
-            // boolean isBatchSummarySuccess = (boolean) exchange.getProperty(BATCH_SUMMARY_SUCCESS);
 
             variables.put(MAX_RETRY_COUNT, maxRetryCount);
             variables.put(CURRENT_RETRY_COUNT, ++currentRetryCount);
@@ -106,16 +87,29 @@ public class BatchSummaryWorker extends BaseWorker {
                 logger.info("mock-payment-schema returned 0/null total but Zeebe has pre-set counts (total={}). Using pre-set values (closedloop path).", preSetTotal);
                 variables.put(BATCH_SUMMARY_SUCCESS, true);
             } else {
-                variables.put(ERROR_CODE, exchange.getProperty(ERROR_CODE));
-                variables.put(ERROR_DESCRIPTION, exchange.getProperty(ERROR_DESCRIPTION));
-                logger.info("Error: {}, {}", variables.get(ERROR_CODE), variables.get(ERROR_DESCRIPTION));
+                // The BPMN's retry gateway tests batchSummarySuccess = false; leaving it unset matches no flow.
+                String errorCode = summary.errorCode() != null ? summary.errorCode() : NO_SUMMARY;
+                String errorDescription = summary.errorDescription() != null ? summary.errorDescription()
+                        : "mock-payment-schema returned no transactions for batch " + batchId;
+                variables.put(BATCH_SUMMARY_SUCCESS, false);
+                variables.put(ERROR_CODE, errorCode);
+                variables.put(ERROR_DESCRIPTION, errorDescription);
+                logger.warn("Batch summary unavailable for batch {} (attempt {} of {}): {}, {}", batchId,
+                        currentRetryCount - 1, maxRetryCount, errorCode, errorDescription);
             }
 
             client.newCompleteCommand(job.getKey()).variables(variables).send();
         });
     }
 
-    public BatchDTO callApi(String batchId, String tenant) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
+    /** The summary, or why there is none. */
+    public record SummaryResponse(BatchDTO batch, String errorCode, String errorDescription) {
+    }
+
+    static final String NO_SUMMARY = "BATCH_SUMMARY_EMPTY";
+    static final String SUMMARY_CALL_FAILED = "BATCH_SUMMARY_CALL_FAILED";
+
+    public SummaryResponse callApi(String batchId, String tenant) {
         // Set headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -126,21 +120,18 @@ public class BatchSummaryWorker extends BaseWorker {
 
         // Construct request entity with headers
         HttpEntity<String> requestEntity = new HttpEntity<>(headers);
-        BatchDTO batchDTO =  null;
 
         try {
-            // Make the API call
             ResponseEntity<BatchDTO> response = restTemplate.exchange(apiUrl, HttpMethod.GET, requestEntity, BatchDTO.class);
-            //batchDTO = objectMapper.readValue(response.getBody(), BatchDTO.class);
-            batchDTO = response.getBody();
-            // Log response
             logger.info("Batch summary API response: \n\n" + response.getBody());
-            return batchDTO;
-
+            return new SummaryResponse(response.getBody(), null, null);
+        } catch (HttpStatusCodeException e) {
+            logger.warn("Batch summary call to {} answered {}: {}", apiUrl, e.getStatusCode().value(), e.getResponseBodyAsString());
+            return new SummaryResponse(null, String.valueOf(e.getStatusCode().value()),
+                    "Batch summary call answered " + e.getStatusCode().value() + ": " + e.getResponseBodyAsString());
         } catch (Exception e) {
-            // Handle exceptions
-            logger.warn("Exception occurred: " + e.getMessage());
+            logger.warn("Batch summary call to {} failed: {}", apiUrl, e.getMessage());
+            return new SummaryResponse(null, SUMMARY_CALL_FAILED, "Batch summary call failed: " + e.getMessage());
         }
-        return batchDTO;
     }
 }
