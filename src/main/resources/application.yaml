@@ -91,7 +91,7 @@ payment-mode:
 application:
   bucket-name: paymenthub-ee
 
-tenant: "rhino"
+tenant: "greenbank"
 
 bill-pay:
   contactpoint: "http://paymenthub-ee-p2g:8080"
